@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "arm_math.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -52,6 +52,11 @@ TIM_HandleTypeDef htim3;
 uint32_t QEIReadRaw;
 int zeta;
 int mode=0;
+
+arm_pid_instance_f32 PID = {0};
+float position =0;
+float setposition =90;
+float Vfeedback = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -62,7 +67,18 @@ static void MX_TIM3_Init(void);
 static void MX_DAC1_Init(void);
 static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
-
+//float PlantSimulation(float VIn) ;
+float PlantSimulation(float VIn) // run with fix frequency
+{
+static float speed =0;
+static float position =0;
+float current= VIn - speed * 0.0123;
+float torque = current * 0.456;
+float acc = torque * 0.789;
+speed += acc;
+position += speed;
+return position;
+}
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -114,6 +130,10 @@ int main(void)
   HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
 
+  PID.Kp =0.1;
+  PID.Ki =0.00001;
+  PID.Kd = 0.1;
+  arm_pid_init_f32(&PID, 0);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -125,16 +145,30 @@ int main(void)
     /* USER CODE BEGIN 3 */
 	  QEIReadRaw = __HAL_TIM_GET_COUNTER(&htim3);
 	  zeta = QEIReadRaw/3071.0*360.0;
-	  if (HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin))
+
+	  //PID
+	  static uint32_t timestamp =0;
+	  if(timestamp < HAL_GetTick())
 	  {
-	  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 50000);
-	  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 0);
+	  timestamp = HAL_GetTick()+10;
+	  Vfeedback = arm_pid_f32(&PID, setposition - position);
+	  position = PlantSimulation(Vfeedback);
 	  }
-	  else
+
+	  //Motordrive
+	  if ((zeta>position*0.97 && zeta<position*1.03)||(zeta>355 && zeta<5))//setposition==0&& || zeta<position*1.02
 	  {
 	  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 0);
-	  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 50000);
+	  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 0);
 	  }
+	  if(zeta<setposition){
+	  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 10000);
+	  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 0);
+	  }if(zeta>setposition){
+	  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 0);
+	  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 10000);
+	  }
+
   }
   /* USER CODE END 3 */
 }
