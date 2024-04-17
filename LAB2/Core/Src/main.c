@@ -43,7 +43,7 @@
 UART_HandleTypeDef hlpuart1;
 
 /* USER CODE BEGIN PV */
-
+int i = 0 ;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -97,7 +97,7 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-
+	  swapmode();
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -238,7 +238,35 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void swapmode(){
+	if (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_SET && i == 0) {
 
+			i = 1;
+		}
+	else if (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_SET && i == 1) {
+
+			i = 2;
+		}
+
+	else if (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_SET && i == 2) {
+
+			i = 0;
+		}
+		if (i == 0) {
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+		}
+		else if (i == 1) {
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+		}
+		else if (i == 2) {
+			static uint32_t timeStamp =0;
+					if(HAL_GetTick()>timeStamp)
+					{
+						timeStamp = HAL_GetTick()+750;
+						HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+					}
+		}
+}
 /* USER CODE END 4 */
 
 /**
