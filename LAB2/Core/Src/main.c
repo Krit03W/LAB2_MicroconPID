@@ -43,23 +43,32 @@
 ADC_HandleTypeDef hadc1;
 DMA_HandleTypeDef hdma_adc1;
 
-DAC_HandleTypeDef hdac1;
-
 UART_HandleTypeDef hlpuart1;
 
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 
 /* USER CODE BEGIN PV */
-uint16_t ADC_RawRead[1]={0};
-uint32_t QEIReadRaw;
-int zeta;
-int mode=0;
+int mode = 1;
+uint16_t ADC_RawRead[30]={0};
+int pot1=0;
+int pot2=0;
+int pot3=0;
+int Avg_pot1=0;
+int Avg_pot2=0;
+int Avg_pot3=0;
+//ข้อหนึ่ง
 
-arm_pid_instance_f32 PID = {0};
-float position =0;
-int setposition =0;
-float Vfeedback = 0;
+//ข้อสอง
+uint32_t QEIReadRaw2;
+int zeta2;
+arm_pid_instance_f32 PID2 = {0};
+float position2 =0;
+int setposition2 =0;
+float Vfeedback2 = 0;
+
+//ข้อสาม
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -68,7 +77,6 @@ static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_LPUART1_UART_Init(void);
 static void MX_TIM3_Init(void);
-static void MX_DAC1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_ADC1_Init(void);
 /* USER CODE BEGIN PFP */
@@ -76,14 +84,15 @@ static void MX_ADC1_Init(void);
 float PlantSimulation(float VIn) // run with fix frequency
 {
 static float speed =0;
-static float position =0;
+static float position2 =0;
 float current= VIn - speed * 0.0123;
 float torque = current * 0.456;
 float acc = torque * 0.789;
 speed += acc;
-position += speed;
-return position;
+position2 += speed;
+return position2;
 }
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -122,25 +131,28 @@ int main(void)
   MX_DMA_Init();
   MX_LPUART1_UART_Init();
   MX_TIM3_Init();
-  MX_DAC1_Init();
   MX_TIM2_Init();
   MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
+  //ข้อหนึ่ง
+
+  //ข้อสอง
   HAL_TIM_Encoder_Start(&htim3,TIM_CHANNEL_ALL);
 
   HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
-  HAL_ADC_Start_DMA(&hadc1, ADC_RawRead, 1);
+  HAL_ADC_Start_DMA(&hadc1, ADC_RawRead, 30);
 
-//  HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, 2048);
-//  HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
   HAL_TIM_Base_Start(&htim2);
   HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
 
-  PID.Kp =0.1;
-  PID.Ki =0.00001;
-  PID.Kd = 0.1;
-  arm_pid_init_f32(&PID, 0);
+  PID2.Kp =0.1;
+  PID2.Ki =0.00001;
+  PID2.Kd = 0.1;
+  arm_pid_init_f32(&PID2, 0);
+
+  //ข้อสาม
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -150,32 +162,52 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  QEIReadRaw = __HAL_TIM_GET_COUNTER(&htim3);
-	  zeta = QEIReadRaw/3071.0*360.0;
+	  swapmode();
+	  ADC_pot();
+	  //ข้อหนึ่ง
+	  if (mode == 1){
+	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+	  }
 
+	  //ข้อสอง
+	  if (mode == 2){
+	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+	  //Encoder
+	  QEIReadRaw2 = __HAL_TIM_GET_COUNTER(&htim3);
+	  zeta2 = QEIReadRaw2/3071.0*360.0;
 	  //PID
-	  setposition = (ADC_RawRead[0]/4095.0*360);
+	  setposition2 = (Avg_pot2/4095.0*359);
 	  static uint32_t timestamp =0;
 	  if(timestamp < HAL_GetTick())
 	  {
-	  timestamp = HAL_GetTick()+10;
-	  Vfeedback = arm_pid_f32(&PID, setposition - position);
-	  position = PlantSimulation(Vfeedback);
+	  timestamp = HAL_GetTick()+1;
+	  Vfeedback2 = arm_pid_f32(&PID2, setposition2 - position2);
+	  position2 = PlantSimulation(Vfeedback2);
 	  }
-
 	  //Motordrive
-	  if ((zeta>position*0.97 && zeta<position*1.03))//setposition==0&& || zeta<position*1.02
+	  if ((zeta2>position2*0.98 && zeta2<position2*1.02))
 	  {
 	  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 0);
 	  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 0);
 	  }
-	  if(zeta<setposition){
+	  if(zeta2<setposition2){
 	  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 10000);
 	  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 0);
-	  }if(zeta>setposition){
+	  }if(zeta2>setposition2){
 	  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 0);
 	  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 10000);
 	  }
+	  }
+
+	  //ข้อสาม
+	  if (mode == 3){
+	  static uint32_t timeStamp =0;
+	  if(HAL_GetTick()>timeStamp){
+	  	timeStamp = HAL_GetTick()+500;
+	  	HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+	  }
+
+	  		}
 
   }
   /* USER CODE END 3 */
@@ -292,53 +324,6 @@ static void MX_ADC1_Init(void)
   /* USER CODE BEGIN ADC1_Init 2 */
 
   /* USER CODE END ADC1_Init 2 */
-
-}
-
-/**
-  * @brief DAC1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_DAC1_Init(void)
-{
-
-  /* USER CODE BEGIN DAC1_Init 0 */
-
-  /* USER CODE END DAC1_Init 0 */
-
-  DAC_ChannelConfTypeDef sConfig = {0};
-
-  /* USER CODE BEGIN DAC1_Init 1 */
-
-  /* USER CODE END DAC1_Init 1 */
-
-  /** DAC Initialization
-  */
-  hdac1.Instance = DAC1;
-  if (HAL_DAC_Init(&hdac1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  /** DAC channel OUT1 config
-  */
-  sConfig.DAC_HighFrequency = DAC_HIGH_FREQUENCY_INTERFACE_MODE_AUTOMATIC;
-  sConfig.DAC_DMADoubleDataMode = DISABLE;
-  sConfig.DAC_SignedFormat = DISABLE;
-  sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
-  sConfig.DAC_Trigger = DAC_TRIGGER_NONE;
-  sConfig.DAC_Trigger2 = DAC_TRIGGER_NONE;
-  sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
-  sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_EXTERNAL;
-  sConfig.DAC_UserTrimming = DAC_TRIMMING_FACTORY;
-  if (HAL_DAC_ConfigChannel(&hdac1, &sConfig, DAC_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN DAC1_Init 2 */
-
-  /* USER CODE END DAC1_Init 2 */
 
 }
 
@@ -560,6 +545,34 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void swapmode(){
+	if (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_SET && mode == 1) {
+			mode = 2;
+			HAL_Delay(500);
+		}
+	else if (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_SET && mode == 2) {
+			mode = 3;
+			HAL_Delay(500);
+		}
+
+	else if (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_SET && mode == 3) {
+			mode = 1;
+			HAL_Delay(500);
+		}
+}
+void ADC_pot(){
+	pot1=0;
+	pot2=0;
+	pot3=0;
+	for(int i=0; i<30; i+=3){
+		pot1+=ADC_RawRead[i];
+		pot2+=ADC_RawRead[i+1];
+		pot3+=ADC_RawRead[i+2];
+		}
+	Avg_pot1=pot1/10.0;
+	Avg_pot2=pot2/10.0;
+	Avg_pot3=pot3/10.0;
+}
 
 /* USER CODE END 4 */
 
